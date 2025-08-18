@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useToast } from '@/hooks/use-toast'
+import { getEdgeFunctionWebSocketUrl } from '@/lib/supabase'
 
 export type ChatState = 'idle' | 'connecting' | 'connected' | 'speaking' | 'listening' | 'error'
 
@@ -25,9 +26,8 @@ export const useRealtimeChat = () => {
       }
 
       // Create WebSocket connection to our Supabase Edge Function
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const host = window.location.host
-      const wsUrl = `${protocol}//${host}/functions/v1/openai-realtime`
+      const wsUrl = getEdgeFunctionWebSocketUrl('openai-realtime')
+      console.log('Attempting to connect to WebSocket URL:', wsUrl)
       
       const websocket = new WebSocket(wsUrl)
       websocketRef.current = websocket
@@ -53,11 +53,12 @@ export const useRealtimeChat = () => {
 
       websocket.onerror = (error) => {
         console.error('WebSocket error:', error)
+        console.error('WebSocket URL was:', wsUrl)
         setIsConnected(false)
         setChatState('error')
         toast({
           title: "Connection Error",
-          description: "Failed to connect to voice assistant",
+          description: `Failed to connect to voice assistant at ${wsUrl}`,
           variant: "destructive",
         })
       }
