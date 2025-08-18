@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
 import { useToast } from '@/hooks/use-toast'
-import { getEdgeFunctionWebSocketUrl } from '@/lib/supabase'
 
 export type ChatState = 'idle' | 'connecting' | 'connected' | 'speaking' | 'listening' | 'error'
 
@@ -26,7 +25,7 @@ export const useRealtimeChat = () => {
       }
 
       // Create WebSocket connection to our Supabase Edge Function
-      const wsUrl = getEdgeFunctionWebSocketUrl('openai-realtime')
+      const wsUrl = `wss://vxsfjofnyzwhlqxavdpy.functions.supabase.co/functions/v1/openai-realtime`
       console.log('Attempting to connect to WebSocket URL:', wsUrl)
       
       const websocket = new WebSocket(wsUrl)
