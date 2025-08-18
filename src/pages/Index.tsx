@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Search, ChefHat } from "lucide-react";
 import { RecipeCard } from "@/components/RecipeCard";
+import { MicButton } from "@/components/MicButton";
 import { recipes } from "@/data/recipes";
 
 const Index = () => {
@@ -51,6 +52,8 @@ const Index = () => {
           </p>
         </div>
       </footer>
+      
+      <MicButton />
     </div>
   );
 };
