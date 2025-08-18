@@ -1,24 +1,38 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { corsHeaders } from '../_shared/cors.ts'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+}
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 
 serve(async (req) => {
+  console.log('Request received:', req.method, req.url)
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('CORS preflight request')
     return new Response('ok', { headers: corsHeaders })
   }
 
   // Check for WebSocket upgrade
   const upgrade = req.headers.get("upgrade") || ""
+  console.log('Upgrade header:', upgrade)
+  
   if (upgrade.toLowerCase() !== "websocket") {
+    console.log('Not a WebSocket request')
     return new Response("Expected WebSocket connection", { status: 426 })
   }
 
   try {
+    console.log('Checking OpenAI API key...')
     if (!OPENAI_API_KEY) {
+      console.error('OpenAI API key not found in environment')
       throw new Error('OpenAI API key not configured')
     }
+    console.log('OpenAI API key found')
 
     // Upgrade to WebSocket
     const { socket: clientSocket, response } = Deno.upgradeWebSocket(req)
