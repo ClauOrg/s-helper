@@ -11,7 +11,7 @@ interface RealtimeChatMessage {
 export const useRealtimeChat = () => {
   const [chatState, setChatState] = useState<ChatState>('idle')
   const [isConnected, setIsConnected] = useState(false)
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const websocketRef = useRef<WebSocket | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const { toast } = useToast()
 
@@ -24,29 +24,16 @@ export const useRealtimeChat = () => {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
       }
 
-      // Connect to our Supabase Edge Function
-      const response = await fetch('/functions/v1/openai-realtime', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_config: {
-            instructions: 'You are a helpful cooking assistant.',
-            voice: 'alloy'
-          }
-        }),
-      })
+      // Create WebSocket connection to our Supabase Edge Function
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const host = window.location.host
+      const wsUrl = `${protocol}//${host}/functions/v1/openai-realtime`
+      
+      const websocket = new WebSocket(wsUrl)
+      websocketRef.current = websocket
 
-      if (!response.ok) {
-        throw new Error('Failed to connect to realtime service')
-      }
-
-      // Create EventSource for streaming responses
-      const eventSource = new EventSource('/functions/v1/openai-realtime')
-      eventSourceRef.current = eventSource
-
-      eventSource.onopen = () => {
+      websocket.onopen = () => {
+        console.log('WebSocket connected to Edge Function')
         setIsConnected(true)
         setChatState('connected')
         toast({
@@ -55,7 +42,7 @@ export const useRealtimeChat = () => {
         })
       }
 
-      eventSource.onmessage = (event) => {
+      websocket.onmessage = (event) => {
         try {
           const data: RealtimeChatMessage = JSON.parse(event.data)
           handleRealtimeMessage(data)
@@ -64,7 +51,8 @@ export const useRealtimeChat = () => {
         }
       }
 
-      eventSource.onerror = () => {
+      websocket.onerror = (error) => {
+        console.error('WebSocket error:', error)
         setIsConnected(false)
         setChatState('error')
         toast({
@@ -72,6 +60,12 @@ export const useRealtimeChat = () => {
           description: "Failed to connect to voice assistant",
           variant: "destructive",
         })
+      }
+
+      websocket.onclose = () => {
+        console.log('WebSocket connection closed')
+        setIsConnected(false)
+        setChatState('idle')
       }
 
     } catch (error) {
@@ -146,7 +140,7 @@ export const useRealtimeChat = () => {
   }, [])
 
   const sendAudio = useCallback(async (audioBlob: Blob) => {
-    if (!isConnected) return
+    if (!isConnected || !websocketRef.current) return
 
     try {
       setChatState('connecting')
@@ -155,16 +149,13 @@ export const useRealtimeChat = () => {
       const arrayBuffer = await audioBlob.arrayBuffer()
       const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
 
-      // Send audio to our Edge Function
-      await fetch('/functions/v1/openai-realtime', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audio_data: base64Audio
-        }),
-      })
+      // Send audio data via WebSocket
+      const audioMessage = {
+        type: "input_audio_buffer.append",
+        audio: base64Audio
+      }
+
+      websocketRef.current.send(JSON.stringify(audioMessage))
 
     } catch (error) {
       console.error('Error sending audio:', error)
@@ -178,9 +169,9 @@ export const useRealtimeChat = () => {
   }, [isConnected, toast])
 
   const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+    if (websocketRef.current) {
+      websocketRef.current.close()
+      websocketRef.current = null
     }
     
     if (audioContextRef.current) {

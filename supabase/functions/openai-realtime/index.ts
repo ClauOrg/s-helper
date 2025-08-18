@@ -9,12 +9,21 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // Check for WebSocket upgrade
+  const upgrade = req.headers.get("upgrade") || ""
+  if (upgrade.toLowerCase() !== "websocket") {
+    return new Response("Expected WebSocket connection", { status: 426 })
+  }
+
   try {
     if (!OPENAI_API_KEY) {
       throw new Error('OpenAI API key not configured')
     }
 
-    const { audio_data, session_config } = await req.json()
+    // Upgrade to WebSocket
+    const { socket: clientSocket, response } = Deno.upgradeWebSocket(req)
+    
+    let openaiSocket: WebSocket | null = null
 
     // Configure the session for cooking assistant
     const sessionUpdate = {
@@ -41,63 +50,78 @@ serve(async (req) => {
       }
     }
 
-    // Create WebSocket connection to OpenAI Realtime API
-    const websocket = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01', {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'realtime=v1'
+    clientSocket.onopen = () => {
+      console.log('Client WebSocket connected')
+      
+      // Create WebSocket connection to OpenAI Realtime API
+      openaiSocket = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01', {
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'OpenAI-Beta': 'realtime=v1'
+        }
+      })
+
+      openaiSocket.onopen = () => {
+        console.log('Connected to OpenAI Realtime API')
+        // Send session configuration
+        openaiSocket?.send(JSON.stringify(sessionUpdate))
+        
+        // Notify client of successful connection
+        clientSocket.send(JSON.stringify({ type: 'session.created' }))
       }
-    })
 
-    // Create a response stream for the client
-    const { readable, writable } = new TransformStream()
-    const writer = writable.getWriter()
+      openaiSocket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('Received from OpenAI:', data.type)
+          
+          // Forward all messages to client
+          clientSocket.send(event.data)
+        } catch (error) {
+          console.error('Error processing OpenAI message:', error)
+        }
+      }
 
-    websocket.onopen = () => {
-      console.log('Connected to OpenAI Realtime API')
-      // Send session configuration
-      websocket.send(JSON.stringify(sessionUpdate))
+      openaiSocket.onerror = (error) => {
+        console.error('OpenAI WebSocket error:', error)
+        clientSocket.send(JSON.stringify({ type: 'error', error: 'OpenAI connection error' }))
+      }
+
+      openaiSocket.onclose = () => {
+        console.log('OpenAI WebSocket closed')
+        clientSocket.close()
+      }
     }
 
-    websocket.onmessage = async (event) => {
+    clientSocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('Received from OpenAI:', data.type)
+        console.log('Received from client:', data.type)
         
-        // Forward all messages to client
-        await writer.write(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`))
+        // Forward all messages to OpenAI
+        if (openaiSocket && openaiSocket.readyState === WebSocket.OPEN) {
+          openaiSocket.send(event.data)
+        }
       } catch (error) {
-        console.error('Error processing OpenAI message:', error)
+        console.error('Error processing client message:', error)
       }
     }
 
-    websocket.onerror = async (error) => {
-      console.error('WebSocket error:', error)
-      await writer.write(new TextEncoder().encode(`data: ${JSON.stringify({ type: 'error', error: 'Connection error' })}\n\n`))
-    }
-
-    websocket.onclose = async () => {
-      console.log('OpenAI WebSocket closed')
-      await writer.close()
-    }
-
-    // Handle audio data from client
-    if (audio_data) {
-      const audioAppend = {
-        type: "input_audio_buffer.append",
-        audio: audio_data
+    clientSocket.onclose = () => {
+      console.log('Client WebSocket disconnected')
+      if (openaiSocket) {
+        openaiSocket.close()
       }
-      websocket.send(JSON.stringify(audioAppend))
     }
 
-    return new Response(readable, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    })
+    clientSocket.onerror = (error) => {
+      console.error('Client WebSocket error:', error)
+      if (openaiSocket) {
+        openaiSocket.close()
+      }
+    }
+
+    return response
 
   } catch (error) {
     console.error('Error in openai-realtime function:', error)
