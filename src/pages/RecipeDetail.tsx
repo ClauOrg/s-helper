@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Clock, Users, ChefHat } from 'lucide-react';
 import { MicButton } from '@/components/MicButton';
+import { WifiButton } from '@/components/WifiButton';
 import { recipes } from '@/data/recipes';
 
 const RecipeDetail = () => {
@@ -117,6 +118,7 @@ const RecipeDetail = () => {
       </div>
       
       <MicButton />
+      <WifiButton />
     </div>
   );
 };
