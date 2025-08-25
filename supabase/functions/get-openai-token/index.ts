@@ -13,10 +13,25 @@ serve(async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    let OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY is not set');
     }
+
+    // Check if the API key is base64 encoded and decode it if necessary
+    if (!OPENAI_API_KEY.startsWith('sk-')) {
+      try {
+        const decoded = atob(OPENAI_API_KEY);
+        if (decoded.startsWith('sk-')) {
+          OPENAI_API_KEY = decoded;
+          console.log('Decoded base64 encoded API key');
+        }
+      } catch (e) {
+        console.log('API key is not base64 encoded');
+      }
+    }
+
+    console.log('Using API key starting with:', OPENAI_API_KEY.substring(0, 7) + '...');
 
     console.log('Creating OpenAI realtime session...');
 
