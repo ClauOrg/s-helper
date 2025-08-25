@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,9 +14,38 @@ serve(async (req) => {
   }
 
   try {
-    let OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    // Debug: List all available environment variables
+    console.log('Available env vars:', Object.keys(Deno.env.toObject()));
+    
+    // Try different ways to get the API key
+    let OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || 
+                         Deno.env.get('SUPABASE_OPENAI_API_KEY') ||
+                         Deno.env.get('_OPENAI_API_KEY');
+    
+    console.log('API key found:', !!OPENAI_API_KEY);
+    console.log('API key type:', typeof OPENAI_API_KEY);
+    
     if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not set');
+      // Try to get from Supabase vault
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://vxsfjofnyzwhlqxavdpy.supabase.co';
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      
+      if (supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        try {
+          const { data, error } = await supabase.from('vault.secrets').select('secret').eq('name', 'OPENAI_API_KEY').single();
+          if (data && !error) {
+            OPENAI_API_KEY = data.secret;
+            console.log('Retrieved API key from vault');
+          }
+        } catch (e) {
+          console.log('Could not access vault:', e.message);
+        }
+      }
+    }
+    
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not set in environment or vault');
     }
 
     // Check if the API key is base64 encoded and decode it if necessary
@@ -32,7 +62,6 @@ serve(async (req) => {
     }
 
     console.log('Using API key starting with:', OPENAI_API_KEY.substring(0, 7) + '...');
-
     console.log('Creating OpenAI realtime session...');
 
     // Request an ephemeral token from OpenAI
