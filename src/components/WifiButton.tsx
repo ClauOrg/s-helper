@@ -1,27 +1,42 @@
 import { Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 
 export const WifiButton = () => {
-  const [isConnected, setIsConnected] = useState(false);
-  const { toast } = useToast();
+  const { connectionState, connect, disconnect, isConnected } = useRealtimeChat();
 
   const handleClick = () => {
-    setIsConnected(!isConnected);
-    toast({
-      title: isConnected ? "Disconnected" : "Connected",
-      description: isConnected ? "WiFi disconnected" : "WiFi connected successfully",
-    });
+    if (isConnected) {
+      disconnect();
+    } else {
+      connect();
+    }
   };
 
   const getButtonStyles = () => {
     const baseStyles = "fixed right-4 top-1/2 translate-y-8 z-[9999] w-16 h-16 rounded-full shadow-2xl border-2 border-white transition-all duration-300";
     
-    if (isConnected) {
+    if (connectionState === 'connected') {
       return `${baseStyles} bg-green-500 hover:bg-green-600`;
+    } else if (connectionState === 'error') {
+      return `${baseStyles} bg-red-500 hover:bg-red-600`;
+    } else if (connectionState === 'connecting') {
+      return `${baseStyles} bg-yellow-500 hover:bg-yellow-600`;
     } else {
-      return `${baseStyles} bg-gray-500 hover:bg-gray-600`;
+      return `${baseStyles} bg-muted hover:bg-muted/80`;
+    }
+  };
+
+  const getTitle = () => {
+    switch (connectionState) {
+      case 'connected':
+        return "Connected to OpenAI - Click to disconnect";
+      case 'connecting':
+        return "Connecting to OpenAI...";
+      case 'error':
+        return "Connection failed - Click to retry";
+      default:
+        return "Click to connect to OpenAI";
     }
   };
 
@@ -30,7 +45,8 @@ export const WifiButton = () => {
       size="icon"
       className={getButtonStyles()}
       onClick={handleClick}
-      title={isConnected ? "WiFi Connected - Click to disconnect" : "WiFi Disconnected - Click to connect"}
+      title={getTitle()}
+      disabled={connectionState === 'connecting'}
     >
       {isConnected ? (
         <Wifi className="w-8 h-8 text-white" />

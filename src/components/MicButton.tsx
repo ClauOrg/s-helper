@@ -1,27 +1,39 @@
-import { Mic } from "lucide-react";
+import { Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 
 export const MicButton = () => {
-  const [isActive, setIsActive] = useState(false);
-  const { toast } = useToast();
+  const { isConnected, isRecording, startRecording, stopRecording } = useRealtimeChat();
 
   const handleClick = () => {
-    setIsActive(!isActive);
-    toast({
-      title: isActive ? "Mic Off" : "Mic On",
-      description: isActive ? "Microphone disabled" : "Microphone enabled",
-    });
+    if (!isConnected) return;
+    
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
   };
 
   const getButtonStyles = () => {
     const baseStyles = "fixed right-4 top-1/2 -translate-y-1/2 z-[9999] w-16 h-16 rounded-full shadow-2xl border-2 border-white transition-all duration-300";
     
-    if (isActive) {
+    if (!isConnected) {
+      return `${baseStyles} bg-muted hover:bg-muted/80 opacity-50`;
+    } else if (isRecording) {
       return `${baseStyles} bg-red-500 hover:bg-red-600`;
     } else {
       return `${baseStyles} bg-primary hover:bg-primary/90`;
+    }
+  };
+
+  const getTitle = () => {
+    if (!isConnected) {
+      return "Connect to OpenAI first using the WiFi button";
+    } else if (isRecording) {
+      return "Recording - Click to stop";
+    } else {
+      return "Click to start recording";
     }
   };
 
@@ -30,9 +42,14 @@ export const MicButton = () => {
       size="icon"
       className={getButtonStyles()}
       onClick={handleClick}
-      title={isActive ? "Microphone is active - Click to deactivate" : "Microphone is inactive - Click to activate"}
+      title={getTitle()}
+      disabled={!isConnected}
     >
-      <Mic className="w-8 h-8 text-white" />
+      {isRecording ? (
+        <MicOff className="w-8 h-8 text-white" />
+      ) : (
+        <Mic className="w-8 h-8 text-white" />
+      )}
     </Button>
   );
 };

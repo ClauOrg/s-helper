@@ -1,0 +1,4 @@
+project_id = "vxsfjofnyzwhlqxavdpy"
+
+[functions.get-openai-token]
+verify_jwt = false
